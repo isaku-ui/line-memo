@@ -4,47 +4,84 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LINE風マルチメモ</title>
+    <!-- スクリーンショット用 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- 画像トリミング用 (Cropper.js) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
             --bg-color: #7494c0;
+            --bg-image: none;
             --my-bubble-color: #85e249;
             --other-bubble-color: #ffffff;
-            --app-font: sans-serif; /* 初期フォント */
+            --app-font: sans-serif;
+            --app-font-size: 15px;
         }
-        body { font-family: var(--app-font); background-color: var(--bg-color); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { font-family: var(--app-font); background-color: #eee; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
         /* ヘッダー・設定エリア */
-        header { background-color: rgba(0,0,0,0.2); padding: 10px; display: flex; justify-content: space-between; align-items: center; color: white; }
-        .settings-panel { display: none; position: absolute; top: 50px; right: 10px; background: white; color: black; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10; gap: 12px; flex-direction: column; width: 220px; }
+        header { background-color: rgba(0,0,0,0.6); padding: 10px; display: flex; justify-content: space-between; align-items: center; color: white; z-index: 20; }
+        .settings-panel { 
+            display: none; position: absolute; top: 50px; right: 10px; background: white; color: black; 
+            padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10; 
+            gap: 12px; flex-direction: column; width: 280px; max-height: 80vh; overflow-y: auto; 
+        }
         .settings-panel label { font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
-        .settings-panel select { padding: 4px; border-radius: 5px; font-family: var(--app-font); }
+        .settings-panel select, .settings-panel input[type="range"] { flex: 1; margin-left: 10px; font-family: var(--app-font); }
+        .settings-panel input[type="file"] { font-size: 11px; margin-top: 5px; width: 100%; }
+        .settings-panel hr { border: 0; border-top: 1px solid #ddd; margin: 5px 0; }
 
         /* トーク画面エリア */
-        .chat-room { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .chat-room { 
+            flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; 
+            background-color: var(--bg-color);
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+        }
+        
+        /* メッセージ行（アイコン＋吹き出し） */
+        .message-row { display: flex; width: 100%; cursor: pointer; transition: opacity 0.2s; align-items: flex-start; }
+        .message-row.left { justify-content: flex-start; gap: 8px; }
+        .message-row.right { justify-content: flex-end; }
+        
+        /* 相手のアイコン */
+        .icon { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         
         /* 吹き出しの共通スタイル */
-        .bubble { max-width: 70%; padding: 10px 14px; border-radius: 15px; font-size: 15px; line-height: 1.4; word-break: break-all; position: relative; cursor: pointer; transition: transform 0.1s; }
-        .bubble:active { transform: scale(0.98); }
-        
-        /* スクショ用に選択されたときの見た目 */
-        .bubble.selected { outline: 3px solid #ff4757; box-shadow: 0 0 10px rgba(255, 71, 87, 0.5); }
+        .bubble { max-width: 70%; padding: 10px 14px; border-radius: 15px; font-size: var(--app-font-size); line-height: 1.4; word-break: break-all; position: relative; transition: transform 0.1s; }
+        .message-row:active .bubble { transform: scale(0.98); }
         
         /* 右側（自分） / 左側（相手） */
-        .right { align-self: flex-end; background-color: var(--my-bubble-color); border-top-right-radius: 2px; color: #000; }
-        .left { align-self: flex-start; background-color: var(--other-bubble-color); border-top-left-radius: 2px; color: #000; }
+        .right .bubble { background-color: var(--my-bubble-color); border-top-right-radius: 2px; color: #000; }
+        .left .bubble { background-color: var(--other-bubble-color); border-top-left-radius: 2px; color: #000; }
+        
+        /* スクショ用に選択されたときの見た目 */
+        .message-row.selected { background-color: rgba(255, 71, 87, 0.1); border-radius: 10px; padding: 5px; margin: -5px; }
+        .message-row.selected .bubble, .message-row.selected .icon { outline: 3px solid #ff4757; box-shadow: 0 0 10px rgba(255, 71, 87, 0.5); }
         
         /* 下部入力エリア */
-        .input-area { background-color: #ffffff; padding: 10px; display: flex; gap: 8px; align-items: center; }
+        .input-area { background-color: #ffffff; padding: 10px; display: flex; gap: 8px; align-items: center; z-index: 20; }
         .side-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; background: #f0f0f0; font-weight: bold; cursor: pointer; font-size: 12px; }
         .side-btn.active-right { background-color: #06c755; color: white; border-color: #06c755; }
         textarea { flex: 1; height: 40px; padding: 10px; border: 1px solid #ddd; border-radius: 20px; resize: none; font-size: 16px; outline: none; }
         .send-btn { background-color: #06c755; color: white; border: none; padding: 0 15px; height: 40px; border-radius: 20px; font-weight: bold; cursor: pointer; }
 
         /* スクショモードの案内バー */
-        .shot-bar { display: none; background-color: #ff4757; color: white; padding: 8px; text-align: center; font-size: 13px; font-weight: bold; justify-content: space-between; align-items: center; px: 15px;}
+        .shot-bar { display: none; background-color: #ff4757; color: white; padding: 8px; text-align: center; font-size: 13px; font-weight: bold; justify-content: space-between; align-items: center; z-index: 20; }
         .shot-bar button { background: white; color: #ff4757; border: none; padding: 4px 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        /* 画像トリミング用モーダル */
+        .crop-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 9999; flex-direction: column; }
+        .crop-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 20px; }
+        .crop-container img { max-width: 100%; max-height: 100%; display: block; }
+        .crop-actions { padding: 15px; display: flex; justify-content: space-between; background: #222; }
+        .crop-actions button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 15px; }
+        .btn-cancel { background: #555; color: white; }
+        .btn-apply { background: #06c755; color: white; }
     </style>
 </head>
 <body>
@@ -54,8 +91,18 @@
         <button onclick="toggleSettings()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">⚙️</button>
         <div class="settings-panel" id="settingsPanel">
             <label>背景色: <input type="color" id="bgColorPicker" value="#7494c0" onchange="changeColor('--bg-color', this.value)"></label>
+            <label style="flex-direction:column; align-items:flex-start; gap:5px;">背景画像を設定: 
+                <div style="display:flex; width:100%; gap:5px;">
+                    <input type="file" accept="image/*" id="bgInput" onchange="handleImageSelect(event, 'bg')">
+                    <button onclick="clearBgImage()" style="font-size:11px; padding:2px 5px; cursor:pointer;">クリア</button>
+                </div>
+            </label>
+            <hr>
             <label>自分の吹き出し: <input type="color" id="myColorPicker" value="#85e249" onchange="changeColor('--my-bubble-color', this.value)"></label>
             <label>相手の吹き出し: <input type="color" id="otherColorPicker" value="#ffffff" onchange="changeColor('--other-bubble-color', this.value)"></label>
+            <label style="flex-direction:column; align-items:flex-start; gap:5px;">相手のアイコン画像: 
+                <input type="file" accept="image/*" id="iconInput" onchange="handleImageSelect(event, 'icon')">
+            </label>
             <hr>
             <label>フォント: 
                 <select id="fontSelect" onchange="changeFont(this.value)">
@@ -65,13 +112,17 @@
                     <option value="'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif">丸ゴシック風</option>
                 </select>
             </label>
+            <label>文字の大きさ: 
+                <input type="range" id="fontSizePicker" min="10" max="30" value="15" onchange="changeFontSize(this.value)">
+            </label>
             <hr>
-            <button onclick="startScreenshotMode()" style="width:100%; padding:6px; background:#ff4757; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">✂️ スクショモード開始</button>
+            <button onclick="startScreenshotMode()" style="width:100%; padding:8px; background:#ff4757; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">✂️ スクショモード開始</button>
+            <button onclick="clearHistory()" style="width:100%; padding:6px; background:#ccc; color:black; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:5px;">🗑️ 全ての履歴を消去</button>
         </div>
     </header>
 
     <div class="shot-bar" id="shotBar">
-        <span>📸 残したい吹き出しをタップして選択してください</span>
+        <span>📸 残したい吹き出しをタップして選択</span>
         <div>
             <button onclick="cancelScreenshotMode()" style="background:none; color:white; margin-right:10px;">キャンセル</button>
             <button onclick="takeScreenshot()">画像を保存</button>
@@ -79,8 +130,14 @@
     </div>
 
     <div class="chat-room" id="chatRoom">
-        <div class="bubble left" onclick="handleBubbleClick(this)">相手側のメッセージ（タップしてみてね）</div>
-        <div class="bubble right" onclick="handleBubbleClick(this)">自分側のメッセージ（タップしてみてね）</div>
+        <!-- 初期ダミーメッセージ -->
+        <div class="message-row left" onclick="handleRowClick(this)">
+            <img class="icon opponent-icon">
+            <div class="bubble left">相手側のメッセージ（タップしてみてね）</div>
+        </div>
+        <div class="message-row right" onclick="handleRowClick(this)">
+            <div class="bubble right">自分側のメッセージ（タップしてみてね）</div>
+        </div>
     </div>
 
     <div class="input-area">
@@ -89,10 +146,74 @@
         <button class="send-btn" onclick="sendMessage()">送信</button>
     </div>
 
+    <!-- 画像トリミング用モーダル -->
+    <div class="crop-modal" id="cropModal">
+        <div class="crop-container">
+            <img id="cropTarget" src="">
+        </div>
+        <div class="crop-actions">
+            <button class="btn-cancel" onclick="closeCropModal()">キャンセル</button>
+            <button class="btn-apply" onclick="applyCrop()">確定する</button>
+        </div>
+    </div>
+
     <script>
         let currentSide = 'right';
         let isScreenshotMode = false;
+        
+        // デフォルトのグレーアイコン(SVG Data URL)
+        const defaultIcon = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23aaa'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23ddd'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%23aaa'/%3E%3C/svg%3E";
 
+        let settings = {
+            bgColor: '#7494c0',
+            myColor: '#85e249',
+            otherColor: '#ffffff',
+            fontFamily: 'sans-serif',
+            fontSize: 15,
+            bgImage: '',
+            iconImage: defaultIcon
+        };
+
+        // --- ローカルストレージ（保存と読み込み） ---
+        function saveSettings() {
+            localStorage.setItem('line_memo_settings', JSON.stringify(settings));
+        }
+
+        function saveHistory() {
+            const chatRoom = document.getElementById('chatRoom');
+            localStorage.setItem('line_memo_history', chatRoom.innerHTML);
+        }
+
+        function loadSettings() {
+            const saved = localStorage.getItem('line_memo_settings');
+            if (saved) settings = { ...settings, ...JSON.parse(saved) };
+            
+            // 設定の適用
+            changeColor('--bg-color', settings.bgColor, false);
+            changeColor('--my-bubble-color', settings.myColor, false);
+            changeColor('--other-bubble-color', settings.otherColor, false);
+            changeFont(settings.fontFamily, false);
+            changeFontSize(settings.fontSize, false);
+            if (settings.bgImage) document.documentElement.style.setProperty('--bg-image', `url(${settings.bgImage})`);
+            
+            // UIの値に反映
+            document.getElementById('bgColorPicker').value = settings.bgColor;
+            document.getElementById('myColorPicker').value = settings.myColor;
+            document.getElementById('otherColorPicker').value = settings.otherColor;
+            document.getElementById('fontSelect').value = settings.fontFamily;
+            document.getElementById('fontSizePicker').value = settings.fontSize;
+            
+            // 履歴のロード
+            const history = localStorage.getItem('line_memo_history');
+            if (history) document.getElementById('chatRoom').innerHTML = history;
+            
+            // アイコン画像を反映
+            updateOpponentIcons();
+        }
+
+        window.onload = loadSettings;
+
+        // --- UIとチャット機能 ---
         function toggleSide() {
             const btn = document.getElementById('sideBtn');
             if (currentSide === 'right') {
@@ -111,88 +232,165 @@
             const chatRoom = document.getElementById('chatRoom');
             if (input.value.trim() === '') return;
 
-            const newBubble = document.createElement('div');
-            newBubble.className = `bubble ${currentSide}`;
-            newBubble.innerText = input.value;
-            
-            // 新しく追加した吹き出しにもクリックイベントをつける
-            newBubble.onclick = function() { handleBubbleClick(this); };
+            const row = document.createElement('div');
+            row.className = `message-row ${currentSide}`;
+            row.setAttribute('onclick', 'handleRowClick(this)'); // 履歴復元用に属性として追加
 
-            chatRoom.appendChild(newBubble);
+            if (currentSide === 'left') {
+                const icon = document.createElement('img');
+                icon.className = 'icon opponent-icon';
+                icon.src = settings.iconImage;
+                row.appendChild(icon);
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = `bubble ${currentSide}`;
+            bubble.innerText = input.value;
+            row.appendChild(bubble);
+
+            chatRoom.appendChild(row);
             chatRoom.scrollTop = chatRoom.scrollHeight;
             input.value = '';
+            
+            saveHistory();
         }
 
+        function clearHistory() {
+            if (confirm('チャットの履歴を全て消去しますか？（設定は保持されます）')) {
+                document.getElementById('chatRoom').innerHTML = '';
+                saveHistory();
+                toggleSettings();
+            }
+        }
+
+        // --- 設定の変更 ---
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');
             panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
         }
 
-        function changeColor(variableName, colorValue) {
+        function changeColor(variableName, colorValue, save = true) {
             document.documentElement.style.setProperty(variableName, colorValue);
+            if (variableName === '--bg-color') settings.bgColor = colorValue;
+            if (variableName === '--my-bubble-color') settings.myColor = colorValue;
+            if (variableName === '--other-bubble-color') settings.otherColor = colorValue;
+            if (save) saveSettings();
         }
 
-        // フォントを変更する関数
-        function changeFont(fontValue) {
+        function changeFont(fontValue, save = true) {
             document.documentElement.style.setProperty('--app-font', fontValue);
+            settings.fontFamily = fontValue;
+            if (save) saveSettings();
         }
 
-        // --- スクショ機能のロジック ---
+        function changeFontSize(sizeValue, save = true) {
+            document.documentElement.style.setProperty('--app-font-size', sizeValue + 'px');
+            settings.fontSize = sizeValue;
+            if (save) saveSettings();
+        }
 
-        // スクショモード開始
+        // --- 画像のトリミング機能 (Cropper.js) ---
+        let cropper;
+        let cropType = ''; 
+
+        function handleImageSelect(event, type) {
+            const file = event.target.files[0];
+            if (file) openCropModal(file, type);
+            event.target.value = ''; // 連続で同じ画像を選べるようにリセット
+        }
+
+        function openCropModal(file, type) {
+            cropType = type;
+            const url = URL.createObjectURL(file);
+            const img = document.getElementById('cropTarget');
+            img.src = url;
+            document.getElementById('cropModal').style.display = 'flex';
+            
+            if (cropper) cropper.destroy();
+            
+            // アイコンは正方形(1:1)、背景は自由比率
+            const aspectRatio = type === 'icon' ? 1 : NaN; 
+            cropper = new Cropper(img, { aspectRatio: aspectRatio, viewMode: 1 });
+        }
+
+        function closeCropModal() {
+            document.getElementById('cropModal').style.display = 'none';
+            if (cropper) { cropper.destroy(); cropper = null; }
+        }
+
+        function applyCrop() {
+            // ストレージ圧迫を防ぐためサイズを縮小して取得
+            const canvas = cropper.getCroppedCanvas(cropType === 'icon' ? { width: 150, height: 150 } : { maxWidth: 1080, maxHeight: 1080 });
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            
+            if (cropType === 'bg') {
+                document.documentElement.style.setProperty('--bg-image', `url(${base64})`);
+                settings.bgImage = base64;
+            } else if (cropType === 'icon') {
+                settings.iconImage = base64;
+                updateOpponentIcons();
+                saveHistory(); // アイコン変更を履歴にも反映
+            }
+            
+            saveSettings();
+            closeCropModal();
+        }
+
+        function clearBgImage() {
+            document.documentElement.style.setProperty('--bg-image', 'none');
+            settings.bgImage = '';
+            saveSettings();
+        }
+
+        function updateOpponentIcons() {
+            document.querySelectorAll('.opponent-icon').forEach(icon => {
+                icon.src = settings.iconImage;
+            });
+        }
+
+        // --- スクショ機能 ---
         function startScreenshotMode() {
             isScreenshotMode = true;
-            toggleSettings(); // 設定を閉じる
+            toggleSettings(); 
             document.getElementById('shotBar').style.display = 'flex';
         }
 
-        // スクショモード終了（キャンセル）
         function cancelScreenshotMode() {
             isScreenshotMode = false;
             document.getElementById('shotBar').style.display = 'none';
-            // 選択状態を全部解除
-            document.querySelectorAll('.bubble').forEach(b => b.classList.remove('selected'));
+            document.querySelectorAll('.message-row').forEach(row => row.classList.remove('selected'));
         }
 
-        // 吹き出しがタップされた時の処理
-        function handleBubbleClick(element) {
-            if (!isScreenshotMode) return; // スクショモードじゃなければ無視
-            
-            // 赤枠の（selectedクラス）をつけたり外したりする
+        function handleRowClick(element) {
+            if (!isScreenshotMode) return;
             element.classList.toggle('selected');
         }
 
-        // 選択された部分だけを画像化してダウンロード
         function takeScreenshot() {
-            const selectedBubbles = document.querySelectorAll('.bubble.selected');
-            if (selectedBubbles.length === 0) {
+            const selectedRows = document.querySelectorAll('.message-row.selected');
+            if (selectedRows.length === 0) {
                 alert('画像にしたい吹き出しを最低1つタップして選択してください！');
                 return;
             }
 
-            // 一時的に、選択されていない吹き出しを非表示にする
-            const allBubbles = document.querySelectorAll('.bubble');
-            allBubbles.forEach(b => {
-                if (!b.classList.contains('selected')) {
-                    b.style.opacity = '0'; // 見えなくする
-                }
-                b.classList.remove('selected'); // 赤枠を画像に映さないために一時解除
+            const allRows = document.querySelectorAll('.message-row');
+            allRows.forEach(row => {
+                if (!row.classList.contains('selected')) row.style.opacity = '0'; // 選択外を見えなくする
+                row.classList.remove('selected'); // 赤枠を外す
             });
 
-            // チャットルーム全体をパシャリと撮影
             const target = document.getElementById('chatRoom');
             html2canvas(target, {
-                backgroundColor: getComputedStyle(document.body).backgroundColor, // 現在の背景色を維持
-                useCORS: true
+                backgroundColor: null, // targetの背景色/画像をそのまま利用
+                useCORS: true,
+                scale: 2 // 画質向上
             }).then(canvas => {
-                // 画像データ(URL)に変換
                 const link = document.createElement('a');
                 link.download = 'chat-screenshot.png';
-                link.href = canvas.toDataURL();
-                link.click(); // ダウンロード実行
+                link.href = canvas.toDataURL('image/png');
+                link.click();
 
-                // 元の状態（非表示にしてたのを戻す）に戻す
-                allBubbles.forEach(b => b.style.opacity = '1');
+                allRows.forEach(row => row.style.opacity = '1'); // 元に戻す
                 cancelScreenshotMode();
             });
         }
