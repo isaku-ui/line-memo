@@ -528,7 +528,7 @@
 
         function startScreenshotMode() {
             isScreenshotMode = true;
-            document.body.classList.add('screenshot-mode'); // プレースホルダーを非表示にするため
+            document.body.classList.add('screenshot-mode'); 
             if (document.getElementById('settingsPanel').style.display === 'flex') {
                 toggleSettings(); 
             }
@@ -547,6 +547,7 @@
             element.classList.toggle('selected');
         }
 
+        // ▼ 大幅に変更したスクショ処理 ▼
         function takeScreenshot() {
             const selectedRows = document.querySelectorAll('.message-row.selected');
             if (selectedRows.length === 0) {
@@ -555,26 +556,76 @@
             }
 
             const allRows = document.querySelectorAll('.message-row');
+            const target = document.getElementById('chatRoom');
+            
+            // 1. スクロール位置を記憶
+            const originalScrollTop = target.scrollTop;
+
+            // 2. 選択されていない行を非表示にし、選択状態の枠線を消す
             allRows.forEach(row => {
-                if (!row.classList.contains('selected')) row.style.display = 'none'; 
+                if (!row.classList.contains('selected')) {
+                    row.style.display = 'none'; 
+                }
                 row.classList.remove('selected'); 
             });
 
-            const target = document.getElementById('chatRoom');
-            html2canvas(target, {
-                backgroundColor: null, 
-                useCORS: true,
-                scale: window.devicePixelRatio || 2 
-            }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'chat-screenshot.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
+            // 3. 要素が上に詰まるのでスクロール位置を一番上にリセット（見切れの最大の原因対策）
+            target.scrollTop = 0;
 
-                allRows.forEach(row => row.style.display = 'flex'); 
-                cancelScreenshotMode();
-                target.scrollTop = target.scrollHeight;
-            });
+            // 4. html2canvasが画面外の要素も認識できるよう、一時的にスタイルを変更して高さを最大化する
+            const bodyOriginalOverflow = document.body.style.overflow;
+            const bodyOriginalHeight = document.body.style.height;
+            const targetOriginalOverflow = target.style.overflow;
+            const targetOriginalHeight = target.style.height;
+
+            document.body.style.overflow = 'visible';
+            document.body.style.height = 'auto';
+            target.style.overflow = 'visible';
+            target.style.height = 'max-content';
+
+            // レンダリングが反映されるのを少し待ってから撮影
+            setTimeout(() => {
+                html2canvas(target, {
+                    backgroundColor: null, 
+                    useCORS: true,
+                    scale: window.devicePixelRatio || 2,
+                    windowWidth: target.scrollWidth,
+                    windowHeight: target.scrollHeight, // 中身全体の高さを指定
+                    scrollY: 0
+                }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = 'chat-screenshot.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+
+                    // 5. 撮影後、スタイルや表示をすべて元に戻す
+                    document.body.style.overflow = bodyOriginalOverflow;
+                    document.body.style.height = bodyOriginalHeight;
+                    target.style.overflow = targetOriginalOverflow;
+                    target.style.height = targetOriginalHeight;
+
+                    allRows.forEach(row => {
+                        row.style.display = ''; // CSSのデフォルト(flex)に戻す
+                    }); 
+                    
+                    cancelScreenshotMode();
+                    
+                    // スクロール位置を元に戻す
+                    target.scrollTop = originalScrollTop;
+
+                }).catch(err => {
+                    console.error("Screenshot failed:", err);
+                    alert("スクショの作成に失敗しました。");
+                    
+                    // エラー時も復旧
+                    document.body.style.overflow = bodyOriginalOverflow;
+                    document.body.style.height = bodyOriginalHeight;
+                    target.style.overflow = targetOriginalOverflow;
+                    target.style.height = targetOriginalHeight;
+                    allRows.forEach(row => { row.style.display = ''; }); 
+                    cancelScreenshotMode();
+                });
+            }, 100);
         }
     </script>
 </body>
