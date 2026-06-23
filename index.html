@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINE風マルチメモ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg-color: #7494c0;
+            --my-bubble-color: #85e249;
+            --other-bubble-color: #ffffff;
+            --app-font: sans-serif; /* 初期フォント */
+        }
+        body { font-family: var(--app-font); background-color: var(--bg-color); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* ヘッダー・設定エリア */
+        header { background-color: rgba(0,0,0,0.2); padding: 10px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .settings-panel { display: none; position: absolute; top: 50px; right: 10px; background: white; color: black; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10; gap: 12px; flex-direction: column; width: 220px; }
+        .settings-panel label { font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+        .settings-panel select { padding: 4px; border-radius: 5px; font-family: var(--app-font); }
+
+        /* トーク画面エリア */
+        .chat-room { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        
+        /* 吹き出しの共通スタイル */
+        .bubble { max-width: 70%; padding: 10px 14px; border-radius: 15px; font-size: 15px; line-height: 1.4; word-break: break-all; position: relative; cursor: pointer; transition: transform 0.1s; }
+        .bubble:active { transform: scale(0.98); }
+        
+        /* スクショ用に選択されたときの見た目 */
+        .bubble.selected { outline: 3px solid #ff4757; box-shadow: 0 0 10px rgba(255, 71, 87, 0.5); }
+        
+        /* 右側（自分） / 左側（相手） */
+        .right { align-self: flex-end; background-color: var(--my-bubble-color); border-top-right-radius: 2px; color: #000; }
+        .left { align-self: flex-start; background-color: var(--other-bubble-color); border-top-left-radius: 2px; color: #000; }
+        
+        /* 下部入力エリア */
+        .input-area { background-color: #ffffff; padding: 10px; display: flex; gap: 8px; align-items: center; }
+        .side-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; background: #f0f0f0; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .side-btn.active-right { background-color: #06c755; color: white; border-color: #06c755; }
+        textarea { flex: 1; height: 40px; padding: 10px; border: 1px solid #ddd; border-radius: 20px; resize: none; font-size: 16px; outline: none; }
+        .send-btn { background-color: #06c755; color: white; border: none; padding: 0 15px; height: 40px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+
+        /* スクショモードの案内バー */
+        .shot-bar { display: none; background-color: #ff4757; color: white; padding: 8px; text-align: center; font-size: 13px; font-weight: bold; justify-content: space-between; align-items: center; px: 15px;}
+        .shot-bar button { background: white; color: #ff4757; border: none; padding: 4px 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <span>LINE風メモ</span>
+        <button onclick="toggleSettings()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">⚙️</button>
+        <div class="settings-panel" id="settingsPanel">
+            <label>背景色: <input type="color" id="bgColorPicker" value="#7494c0" onchange="changeColor('--bg-color', this.value)"></label>
+            <label>自分の吹き出し: <input type="color" id="myColorPicker" value="#85e249" onchange="changeColor('--my-bubble-color', this.value)"></label>
+            <label>相手の吹き出し: <input type="color" id="otherColorPicker" value="#ffffff" onchange="changeColor('--other-bubble-color', this.value)"></label>
+            <hr>
+            <label>フォント: 
+                <select id="fontSelect" onchange="changeFont(this.value)">
+                    <option value="sans-serif">ゴシック体 (標準)</option>
+                    <option value="serif">明朝体</option>
+                    <option value="'Courier New', monospace">等幅（SF風）</option>
+                    <option value="'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif">丸ゴシック風</option>
+                </select>
+            </label>
+            <hr>
+            <button onclick="startScreenshotMode()" style="width:100%; padding:6px; background:#ff4757; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">✂️ スクショモード開始</button>
+        </div>
+    </header>
+
+    <div class="shot-bar" id="shotBar">
+        <span>📸 残したい吹き出しをタップして選択してください</span>
+        <div>
+            <button onclick="cancelScreenshotMode()" style="background:none; color:white; margin-right:10px;">キャンセル</button>
+            <button onclick="takeScreenshot()">画像を保存</button>
+        </div>
+    </div>
+
+    <div class="chat-room" id="chatRoom">
+        <div class="bubble left" onclick="handleBubbleClick(this)">相手側のメッセージ（タップしてみてね）</div>
+        <div class="bubble right" onclick="handleBubbleClick(this)">自分側のメッセージ（タップしてみてね）</div>
+    </div>
+
+    <div class="input-area">
+        <button class="side-btn active-right" id="sideBtn" onclick="toggleSide()">右</button>
+        <textarea id="memoInput" placeholder="メッセージを入力..."></textarea>
+        <button class="send-btn" onclick="sendMessage()">送信</button>
+    </div>
+
+    <script>
+        let currentSide = 'right';
+        let isScreenshotMode = false;
+
+        function toggleSide() {
+            const btn = document.getElementById('sideBtn');
+            if (currentSide === 'right') {
+                currentSide = 'left';
+                btn.innerText = '左';
+                btn.classList.remove('active-right');
+            } else {
+                currentSide = 'right';
+                btn.innerText = '右';
+                btn.classList.add('active-right');
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('memoInput');
+            const chatRoom = document.getElementById('chatRoom');
+            if (input.value.trim() === '') return;
+
+            const newBubble = document.createElement('div');
+            newBubble.className = `bubble ${currentSide}`;
+            newBubble.innerText = input.value;
+            
+            // 新しく追加した吹き出しにもクリックイベントをつける
+            newBubble.onclick = function() { handleBubbleClick(this); };
+
+            chatRoom.appendChild(newBubble);
+            chatRoom.scrollTop = chatRoom.scrollHeight;
+            input.value = '';
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function changeColor(variableName, colorValue) {
+            document.documentElement.style.setProperty(variableName, colorValue);
+        }
+
+        // フォントを変更する関数
+        function changeFont(fontValue) {
+            document.documentElement.style.setProperty('--app-font', fontValue);
+        }
+
+        // --- スクショ機能のロジック ---
+
+        // スクショモード開始
+        function startScreenshotMode() {
+            isScreenshotMode = true;
+            toggleSettings(); // 設定を閉じる
+            document.getElementById('shotBar').style.display = 'flex';
+        }
+
+        // スクショモード終了（キャンセル）
+        function cancelScreenshotMode() {
+            isScreenshotMode = false;
+            document.getElementById('shotBar').style.display = 'none';
+            // 選択状態を全部解除
+            document.querySelectorAll('.bubble').forEach(b => b.classList.remove('selected'));
+        }
+
+        // 吹き出しがタップされた時の処理
+        function handleBubbleClick(element) {
+            if (!isScreenshotMode) return; // スクショモードじゃなければ無視
+            
+            // 赤枠の（selectedクラス）をつけたり外したりする
+            element.classList.toggle('selected');
+        }
+
+        // 選択された部分だけを画像化してダウンロード
+        function takeScreenshot() {
+            const selectedBubbles = document.querySelectorAll('.bubble.selected');
+            if (selectedBubbles.length === 0) {
+                alert('画像にしたい吹き出しを最低1つタップして選択してください！');
+                return;
+            }
+
+            // 一時的に、選択されていない吹き出しを非表示にする
+            const allBubbles = document.querySelectorAll('.bubble');
+            allBubbles.forEach(b => {
+                if (!b.classList.contains('selected')) {
+                    b.style.opacity = '0'; // 見えなくする
+                }
+                b.classList.remove('selected'); // 赤枠を画像に映さないために一時解除
+            });
+
+            // チャットルーム全体をパシャリと撮影
+            const target = document.getElementById('chatRoom');
+            html2canvas(target, {
+                backgroundColor: getComputedStyle(document.body).backgroundColor, // 現在の背景色を維持
+                useCORS: true
+            }).then(canvas => {
+                // 画像データ(URL)に変換
+                const link = document.createElement('a');
+                link.download = 'chat-screenshot.png';
+                link.href = canvas.toDataURL();
+                link.click(); // ダウンロード実行
+
+                // 元の状態（非表示にしてたのを戻す）に戻す
+                allBubbles.forEach(b => b.style.opacity = '1');
+                cancelScreenshotMode();
+            });
+        }
+    </script>
+</body>
+</html>
