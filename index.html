@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LINE風メモ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+P+One&family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=Yomogi&family=Yuji+Syuku&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ▼ オリジナルフォント読み込み ▼ */
+        @font-face {
+            font-family: 'Mashumaro';
+            src: url('./marshmallowpopheart.otf') format('truetype');
+            font-display: swap;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg-color: #e587dc; 
+            --bg-image: none;
+            --my-bubble-color: #8ce1e6;
+            --my-text-color: #000000;
+            --other-bubble-color: #ffffff;
+            --other-text-color: #000000;
+            --date-bg-color: #8ce1e6;
+            --date-text-color: #ffffff;
+            --app-font: 'Noto Sans JP', sans-serif;
+            --app-font-size: 15px;
+        }
+        
+        body { 
+            font-family: var(--app-font); 
+            background-color: #eee; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100dvh; 
+            overflow: hidden; 
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        header { 
+            background-color: rgba(0,0,0,0.4); 
+            padding: 10px 15px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: white; 
+            z-index: 20; 
+            padding-top: max(10px, env(safe-area-inset-top)); 
+        }
+        
+        /* 設定パネル周り */
+        .settings-panel { 
+            display: none; position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 45px); right: 5%; 
+            width: 90%; max-width: 340px; background: white; color: black; padding: 15px; border-radius: 10px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 100; gap: 10px; flex-direction: column; 
+            max-height: 75dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        .settings-panel label { font-size: 14px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .settings-panel select, .settings-panel input[type="range"] { flex: 1; margin-left: 10px; font-family: inherit; }
+        .settings-panel input[type="file"] { font-size: 12px; margin-top: 5px; width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 5px; }
+        .settings-panel input[type="color"] { width: 26px; height: 26px; padding: 0; border: 1px solid #ccc; border-radius: 4px; background: none; cursor: pointer; vertical-align: middle; }
+        .settings-panel hr { border: 0; border-top: 1px solid #eee; margin: 5px 0; }
+        
+        #overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 90; }
+
+        /* トーク画面エリア */
+        .chat-room { 
+            flex: 1; min-height: 0; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; 
+            background-color: var(--bg-color); background-image: var(--bg-image); background-size: cover; background-position: center;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .message-row { display: flex; width: 100%; cursor: pointer; transition: opacity 0.2s; align-items: flex-start; }
+        .message-row.left { justify-content: flex-start; gap: 6px; }
+        .message-row.right { justify-content: flex-end; }
+        .message-row.center { justify-content: center; }
+        
+        .icon { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .bubble { max-width: 75%; padding: 10px 14px; border-radius: 18px; font-size: var(--app-font-size); line-height: 1.4; word-break: break-all; position: relative; transition: transform 0.1s; }
+        .message-row:active .bubble { transform: scale(0.95); opacity: 0.8; }
+        
+        .right .bubble { background-color: var(--my-bubble-color); color: var(--my-text-color); border-top-right-radius: 4px; }
+        .left .bubble { background-color: var(--other-bubble-color); color: var(--other-text-color); border-top-left-radius: 4px; }
+        
+        /* ミニメモ欄のスタイル（既読や時間用） */
+        .mini-memo {
+            font-size: 11px;
+            color: #666;
+            align-self: flex-end;
+            margin-bottom: 2px;
+            min-width: 25px;
+            min-height: 16px;
+            outline: none;
+            cursor: text;
+            white-space: nowrap;
+            line-height: 1.2;
+            padding: 0 2px;
+        }
+        .mini-memo:empty::before {
+            content: 'メモ';
+            color: #aaa;
+            pointer-events: none;
+        }
+        /* スクリーンショット時は未入力のプレースホルダーを消す */
+        body.screenshot-mode .mini-memo:empty::before {
+            content: '';
+        }
+        body.screenshot-mode .mini-memo {
+            pointer-events: none; /* スクショモード中は編集させない */
+        }
+
+        .date-label { 
+            background-color: var(--date-bg-color); color: var(--date-text-color); 
+            padding: 4px 14px; border-radius: 16px; font-size: calc(var(--app-font-size) * 0.85); 
+            text-align: center; max-width: 80%; word-break: break-all; opacity: 0.9;
+            transition: transform 0.1s; font-weight: bold;
+        }
+        .message-row:active .date-label { transform: scale(0.95); opacity: 0.7; }
+
+        .message-row.selected { background-color: rgba(255, 71, 87, 0.1); border-radius: 10px; padding: 5px; margin: -5px; }
+        .message-row.selected .bubble, .message-row.selected .icon, .message-row.selected .date-label { outline: 3px solid #ff4757; box-shadow: 0 0 10px rgba(255, 71, 87, 0.5); }
+        
+        .input-area { background-color: #ffffff; padding: 10px; display: flex; gap: 8px; align-items: center; z-index: 20; border-top: 1px solid #ddd; }
+        .side-btn { width: 45px; height: 45px; border-radius: 50%; border: 2px solid #ccc; background: #f0f0f0; font-weight: bold; cursor: pointer; font-size: 13px; flex-shrink: 0; transition: 0.2s; color: #333; }
+        .side-btn.active-right { background-color: #06c755; color: white; border-color: #06c755; }
+        .side-btn.active-center { background-color: #666; color: white; border-color: #666; }
+        
+        textarea { flex: 1; height: 45px; padding: 12px 10px; border: 1px solid #ddd; border-radius: 20px; resize: none; font-size: 16px; outline: none; background: #f9f9f9; font-family: inherit; }
+        textarea:focus { border-color: #06c755; background: #fff; }
+        .send-btn { background-color: #06c755; color: white; border: none; padding: 0 15px; height: 45px; border-radius: 20px; font-weight: bold; cursor: pointer; flex-shrink: 0; font-size: 14px; }
+
+        .shot-bar { display: none; background-color: #ff4757; color: white; padding: 10px; text-align: center; font-size: 14px; font-weight: bold; justify-content: space-between; align-items: center; z-index: 20; }
+        .shot-bar button { background: white; color: #ff4757; border: none; padding: 6px 12px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        .crop-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 9999; flex-direction: column; }
+        .crop-container { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: center; background: #000; }
+        .crop-container img { max-width: 100%; max-height: 100%; display: block; }
+        .crop-actions { height: 80px; background: #111; display: flex; justify-content: space-around; align-items: center; padding-bottom: env(safe-area-inset-bottom); flex-shrink: 0; }
+        .crop-actions button { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; width: 40%; }
+        .btn-cancel { background: #555; color: white; }
+        .btn-apply { background: #06c755; color: white; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <span style="font-weight:bold; font-size:18px;">LINE風メモ</span>
+        <button onclick="toggleSettings()" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">⚙️</button>
+    </header>
+
+    <div id="overlay" onclick="toggleSettings()"></div>
+
+    <div class="settings-panel" id="settingsPanel">
+        <label>背景色: <input type="color" id="bgColorPicker" value="#e587dc" onchange="changeColor('--bg-color', this.value)"></label>
+        <label style="flex-direction:column; align-items:flex-start; gap:5px;">背景画像を設定: 
+            <div style="display:flex; width:100%; gap:8px;">
+                <input type="file" accept="image/*" id="bgInput" onchange="handleImageSelect(event, 'bg')">
+                <button onclick="clearBgImage()" style="font-size:12px; padding:5px 10px; border:none; background:#eee; border-radius:5px; cursor:pointer; flex-shrink:0;">クリア</button>
+            </div>
+        </label>
+        <hr>
+        
+        <label>自分の色:
+            <span style="font-weight:normal; font-size:12px; display:flex; gap:8px; align-items:center;">
+                背景 <input type="color" id="myColorPicker" value="#8ce1e6" onchange="changeColor('--my-bubble-color', this.value)">
+                文字 <input type="color" id="myTextColorPicker" value="#000000" onchange="changeColor('--my-text-color', this.value)">
+            </span>
+        </label>
+        <label>相手の色:
+            <span style="font-weight:normal; font-size:12px; display:flex; gap:8px; align-items:center;">
+                背景 <input type="color" id="otherColorPicker" value="#ffffff" onchange="changeColor('--other-bubble-color', this.value)">
+                文字 <input type="color" id="otherTextColorPicker" value="#000000" onchange="changeColor('--other-text-color', this.value)">
+            </span>
+        </label>
+        <label>日付ラベル:
+            <span style="font-weight:normal; font-size:12px; display:flex; gap:8px; align-items:center;">
+                背景 <input type="color" id="dateBgColorPicker" value="#8ce1e6" onchange="changeColor('--date-bg-color', this.value)">
+                文字 <input type="color" id="dateTextColorPicker" value="#ffffff" onchange="changeColor('--date-text-color', this.value)">
+            </span>
+        </label>
+        
+        <label style="flex-direction:column; align-items:flex-start; gap:5px; margin-top:5px;">相手のアイコン画像: 
+            <input type="file" accept="image/*" id="iconInput" onchange="handleImageSelect(event, 'icon')">
+        </label>
+        <hr>
+        
+        <label>フォント: 
+            <select id="fontSelect" onchange="changeFont(this.value)" style="padding:5px; border-radius:5px; border:1px solid #ccc;">
+                <option value="'Mashumaro', sans-serif">❤️ ましゅまろポップハート</option>
+                <option value="'Noto Sans JP', sans-serif">ゴシック体</option>
+                <option value="'Noto Serif JP', serif">明朝体</option>
+                <option value="'Zen Maru Gothic', sans-serif">丸ゴシック</option>
+                <option value="'Mochiy Pop P One', sans-serif">ポップ体風</option>
+                <option value="'Yomogi', cursive">手書き風</option>
+                <option value="'Yuji Syuku', serif">筆文字風</option>
+            </select>
+        </label>
+
+        <label>文字の大きさ: 
+            <input type="range" id="fontSizePicker" min="12" max="24" value="15" onchange="changeFontSize(this.value)">
+        </label>
+        <hr>
+        <button onclick="startScreenshotMode()" style="width:100%; padding:12px; background:#ff4757; color:white; border:none; border-radius:8px; font-weight:bold; font-size:15px; cursor:pointer;">✂️ スクショモード開始</button>
+        <button onclick="clearHistory()" style="width:100%; padding:10px; background:#e0e0e0; color:#333; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-top:8px;">🗑️ 全ての履歴を消去</button>
+    </div>
+
+    <div class="shot-bar" id="shotBar">
+        <span>📸 残す吹き出しをタップ</span>
+        <div style="display:flex; gap:10px;">
+            <button onclick="cancelScreenshotMode()" style="background:none; color:white; border:1px solid white;">中止</button>
+            <button onclick="takeScreenshot()">保存</button>
+        </div>
+    </div>
+
+    <div class="chat-room" id="chatRoom">
+        <!-- 初期ダミーテキスト -->
+        <div class="message-row center" onclick="handleRowClick(this)">
+            <div class="date-label">x/xx</div>
+        </div>
+        <div class="message-row left" onclick="handleRowClick(this)">
+            <img class="icon opponent-icon">
+            <div class="bubble left">相手側のメッセージ（タップしてみてね）</div>
+            <div class="mini-memo" contenteditable="true">既読</div>
+        </div>
+        <div class="message-row right" onclick="handleRowClick(this)">
+            <div class="bubble right">自分側のメッセージ（タップしてみてね）</div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <button class="side-btn active-right" id="sideBtn" onclick="toggleSide()">右</button>
+        <textarea id="memoInput" placeholder="メッセージを入力..."></textarea>
+        <button class="send-btn" onclick="sendMessage()">送信</button>
+    </div>
+
+    <div class="crop-modal" id="cropModal">
+        <div class="crop-container">
+            <img id="cropTarget" src="">
+        </div>
+        <div class="crop-actions">
+            <button class="btn-cancel" onclick="closeCropModal()">キャンセル</button>
+            <button class="btn-apply" onclick="applyCrop()">完了</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSide = 'right';
+        let isScreenshotMode = false;
+        let lastOpponentMemo = ""; // メモのデフォルト内容を保持する変数
+        
+        const defaultIcon = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23aaa'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23ddd'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%23aaa'/%3E%3C/svg%3E";
+
+        let settings = {
+            bgColor: '#e587dc',
+            myColor: '#8ce1e6',
+            myTextColor: '#000000',
+            otherColor: '#ffffff',
+            otherTextColor: '#000000',
+            dateBgColor: '#8ce1e6',
+            dateTextColor: '#ffffff',
+            fontFamily: "'Mashumaro', sans-serif",
+            fontSize: 15,
+            bgImage: '',
+            iconImage: defaultIcon
+        };
+
+        // メモ編集時に発火するイベントの設定
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatRoom = document.getElementById('chatRoom');
+            
+            // メモ入力時に履歴と最新のメモ内容を保存
+            chatRoom.addEventListener('input', (e) => {
+                if (e.target.classList.contains('mini-memo')) {
+                    lastOpponentMemo = e.target.innerHTML;
+                    saveHistory();
+                }
+            });
+
+            // メモ編集のためのタップ時に、行全体の選択イベント（スクショ用）が誤発火しないようにする
+            chatRoom.addEventListener('click', (e) => {
+                if (e.target.classList.contains('mini-memo') && !isScreenshotMode) {
+                    e.stopPropagation();
+                }
+            });
+        });
+
+        function saveSettings() {
+            localStorage.setItem('line_memo_settings', JSON.stringify(settings));
+        }
+
+        function saveHistory() {
+            const chatRoom = document.getElementById('chatRoom');
+            localStorage.setItem('line_memo_history', chatRoom.innerHTML);
+        }
+
+        function loadSettings() {
+            const saved = localStorage.getItem('line_memo_settings');
+            if (saved) settings = { ...settings, ...JSON.parse(saved) };
+            
+            changeColor('--bg-color', settings.bgColor, false);
+            changeColor('--my-bubble-color', settings.myColor, false);
+            changeColor('--my-text-color', settings.myTextColor, false);
+            changeColor('--other-bubble-color', settings.otherColor, false);
+            changeColor('--other-text-color', settings.otherTextColor, false);
+            changeColor('--date-bg-color', settings.dateBgColor, false);
+            changeColor('--date-text-color', settings.dateTextColor, false);
+            
+            changeFont(settings.fontFamily, false);
+            changeFontSize(settings.fontSize, false);
+            if (settings.bgImage) document.documentElement.style.setProperty('--bg-image', `url(${settings.bgImage})`);
+            
+            document.getElementById('bgColorPicker').value = settings.bgColor;
+            document.getElementById('myColorPicker').value = settings.myColor;
+            document.getElementById('myTextColorPicker').value = settings.myTextColor;
+            document.getElementById('otherColorPicker').value = settings.otherColor;
+            document.getElementById('otherTextColorPicker').value = settings.otherTextColor;
+            document.getElementById('dateBgColorPicker').value = settings.dateBgColor;
+            document.getElementById('dateTextColorPicker').value = settings.dateTextColor;
+            
+            const fontSelect = document.getElementById('fontSelect');
+            if(Array.from(fontSelect.options).some(opt => opt.value === settings.fontFamily)) {
+                fontSelect.value = settings.fontFamily;
+            }
+
+            document.getElementById('fontSizePicker').value = settings.fontSize;
+            
+            const history = localStorage.getItem('line_memo_history');
+            if (history) {
+                document.getElementById('chatRoom').innerHTML = history;
+            }
+
+            // ロード後に最新のメモ内容を取得して変数に保持
+            const memos = document.querySelectorAll('.mini-memo');
+            if (memos.length > 0) {
+                lastOpponentMemo = memos[memos.length - 1].innerHTML;
+            }
+
+            updateOpponentIcons();
+        }
+
+        window.onload = loadSettings;
+
+        function toggleSide() {
+            const btn = document.getElementById('sideBtn');
+            if (currentSide === 'right') {
+                currentSide = 'left';
+                btn.innerText = '左';
+                btn.classList.remove('active-right');
+                btn.classList.remove('active-center');
+            } else if (currentSide === 'left') {
+                currentSide = 'center';
+                btn.innerText = '日付';
+                btn.classList.remove('active-right');
+                btn.classList.add('active-center');
+            } else {
+                currentSide = 'right';
+                btn.innerText = '右';
+                btn.classList.remove('active-center');
+                btn.classList.add('active-right');
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('memoInput');
+            const chatRoom = document.getElementById('chatRoom');
+            const text = input.value.trim();
+            if (text === '') return;
+
+            const row = document.createElement('div');
+            row.className = `message-row ${currentSide}`;
+            row.setAttribute('onclick', 'handleRowClick(this)');
+
+            if (currentSide === 'center') {
+                const label = document.createElement('div');
+                label.className = 'date-label';
+                label.innerHTML = text.replace(/\n/g, '<br>');
+                row.appendChild(label);
+            } else {
+                if (currentSide === 'left') {
+                    const icon = document.createElement('img');
+                    icon.className = 'icon opponent-icon';
+                    icon.src = settings.iconImage;
+                    row.appendChild(icon);
+                }
+                const bubble = document.createElement('div');
+                bubble.className = `bubble ${currentSide}`;
+                bubble.innerHTML = text.replace(/\n/g, '<br>');
+                row.appendChild(bubble);
+
+                // ▼ 左側（相手）の場合のみ、ミニメモを追加 ▼
+                if (currentSide === 'left') {
+                    const memoDiv = document.createElement('div');
+                    memoDiv.className = 'mini-memo';
+                    memoDiv.contentEditable = 'true';
+                    memoDiv.innerHTML = lastOpponentMemo; // 前回の内容を反映
+                    row.appendChild(memoDiv);
+                }
+            }
+
+            chatRoom.appendChild(row);
+            
+            setTimeout(() => { chatRoom.scrollTop = chatRoom.scrollHeight; }, 50);
+            
+            input.value = '';
+            input.focus();
+            saveHistory();
+        }
+
+        function clearHistory() {
+            if (confirm('チャットの履歴を全て消去しますか？（設定は保持されます）')) {
+                document.getElementById('chatRoom').innerHTML = '';
+                saveHistory();
+                toggleSettings();
+            }
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            const overlay = document.getElementById('overlay');
+            if (panel.style.display === 'flex') {
+                panel.style.display = 'none';
+                overlay.style.display = 'none';
+            } else {
+                panel.style.display = 'flex';
+                overlay.style.display = 'block';
+            }
+        }
+
+        function changeColor(variableName, colorValue, save = true) {
+            document.documentElement.style.setProperty(variableName, colorValue);
+            
+            if (variableName === '--bg-color') settings.bgColor = colorValue;
+            if (variableName === '--my-bubble-color') settings.myColor = colorValue;
+            if (variableName === '--my-text-color') settings.myTextColor = colorValue;
+            if (variableName === '--other-bubble-color') settings.otherColor = colorValue;
+            if (variableName === '--other-text-color') settings.otherTextColor = colorValue;
+            if (variableName === '--date-bg-color') settings.dateBgColor = colorValue;
+            if (variableName === '--date-text-color') settings.dateTextColor = colorValue;
+            
+            if (save) saveSettings();
+        }
+
+        function changeFont(fontValue, save = true) {
+            document.documentElement.style.setProperty('--app-font', fontValue);
+            settings.fontFamily = fontValue;
+            if (save) saveSettings();
+        }
+
+        function changeFontSize(sizeValue, save = true) {
+            document.documentElement.style.setProperty('--app-font-size', sizeValue + 'px');
+            settings.fontSize = sizeValue;
+            if (save) saveSettings();
+        }
+
+        let cropper;
+        let cropType = ''; 
+
+        function handleImageSelect(event, type) {
+            const file = event.target.files[0];
+            if (file) openCropModal(file, type);
+            event.target.value = ''; 
+        }
+
+        function openCropModal(file, type) {
+            cropType = type;
+            const url = URL.createObjectURL(file);
+            const img = document.getElementById('cropTarget');
+            img.src = url;
+            
+            document.getElementById('cropModal').style.display = 'flex';
+            if (document.getElementById('settingsPanel').style.display === 'flex') {
+                toggleSettings(); 
+            }
+            
+            if (cropper) cropper.destroy();
+            
+            const aspectRatio = type === 'icon' ? 1 : NaN; 
+            cropper = new Cropper(img, { 
+                aspectRatio: aspectRatio, 
+                viewMode: 1,
+                dragMode: 'move',
+                background: false,
+                autoCropArea: 0.8
+            });
+        }
+
+        function closeCropModal() {
+            document.getElementById('cropModal').style.display = 'none';
+            if (cropper) { cropper.destroy(); cropper = null; }
+        }
+
+        function applyCrop() {
+            const canvas = cropper.getCroppedCanvas(cropType === 'icon' ? { width: 150, height: 150 } : { maxWidth: 1080, maxHeight: 1080 });
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            
+            if (cropType === 'bg') {
+                document.documentElement.style.setProperty('--bg-image', `url(${base64})`);
+                settings.bgImage = base64;
+            } else if (cropType === 'icon') {
+                settings.iconImage = base64;
+                updateOpponentIcons();
+                saveHistory(); 
+            }
+            
+            saveSettings();
+            closeCropModal();
+        }
+
+        function clearBgImage() {
+            document.documentElement.style.setProperty('--bg-image', 'none');
+            settings.bgImage = '';
+            saveSettings();
+        }
+
+        function updateOpponentIcons() {
+            document.querySelectorAll('.opponent-icon').forEach(icon => {
+                icon.src = settings.iconImage;
+            });
+        }
+
+        function startScreenshotMode() {
+            isScreenshotMode = true;
+            document.body.classList.add('screenshot-mode'); // プレースホルダーを非表示にするため
+            if (document.getElementById('settingsPanel').style.display === 'flex') {
+                toggleSettings(); 
+            }
+            document.getElementById('shotBar').style.display = 'flex';
+        }
+
+        function cancelScreenshotMode() {
+            isScreenshotMode = false;
+            document.body.classList.remove('screenshot-mode');
+            document.getElementById('shotBar').style.display = 'none';
+            document.querySelectorAll('.message-row').forEach(row => row.classList.remove('selected'));
+        }
+
+        function handleRowClick(element) {
+            if (!isScreenshotMode) return;
+            element.classList.toggle('selected');
+        }
+
+        function takeScreenshot() {
+            const selectedRows = document.querySelectorAll('.message-row.selected');
+            if (selectedRows.length === 0) {
+                alert('画像にしたい吹き出しや日付をタップして選んでね！');
+                return;
+            }
+
+            const allRows = document.querySelectorAll('.message-row');
+            allRows.forEach(row => {
+                if (!row.classList.contains('selected')) row.style.display = 'none'; 
+                row.classList.remove('selected'); 
+            });
+
+            const target = document.getElementById('chatRoom');
+            html2canvas(target, {
+                backgroundColor: null, 
+                useCORS: true,
+                scale: window.devicePixelRatio || 2 
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'chat-screenshot.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+
+                allRows.forEach(row => row.style.display = 'flex'); 
+                cancelScreenshotMode();
+                target.scrollTop = target.scrollHeight;
+            });
+        }
+    </script>
+</body>
+</html>
